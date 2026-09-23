@@ -7,18 +7,17 @@ from typing import Any
 
 import typer
 from pipefy_sdk import (
+    AiAgentConfigureError,
     CreateAiAgentInput,
     PipefyClient,
+    PipefyGraphQLError,
     UpdateAiAgentInput,
-)
-from pipefy_sdk.behavior_placeholders import (
-    expand_behaviors_placeholders,
-    normalize_pipefy_ai_instruction_tokens,
 )
 from pydantic import ValidationError
 
 from pipefy_cli.commands._common import (
     ID_POSITIONAL_CONTEXT_SETTINGS,
+    _format_transport_query_error,
     confirm_destructive,
     parse_json_value,
     resource_id_argument,
@@ -143,15 +142,13 @@ def agent_create(
             raise typer.BadParameter("--data-sources must be a JSON array of strings")
         data_source_ids = list(ds_raw)
 
-    inst = normalize_pipefy_ai_instruction_tokens(instruction.strip())
     disabled_at = None if active else datetime.now(timezone.utc).isoformat()
     try:
-        expanded = expand_behaviors_placeholders(behavior_list)
         validated = CreateAiAgentInput(
             name=name.strip(),
             repo_uuid=repo_uuid.strip(),
-            instruction=inst,
-            behaviors=expanded,
+            instruction=instruction.strip(),
+            behaviors=behavior_list,
             data_source_ids=data_source_ids,
             disabled_at=disabled_at,
         )
@@ -165,26 +162,25 @@ def agent_create(
             strict_unknown_action_types=strict_unknown,
         )
         _raise_if_preflight_blocks(pre)
-        create_result = await client.create_ai_agent(validated)
-        agent_uuid = create_result["agent_uuid"]
-        update_input = UpdateAiAgentInput(
-            uuid=agent_uuid,
-            name=validated.name,
-            repo_uuid=validated.repo_uuid,
-            instruction=validated.instruction,
-            behaviors=validated.behaviors,
-            data_source_ids=validated.data_source_ids,
-            disabled_at=validated.disabled_at,
-            preserve_disabled_at=False,
-        )
-        update_result = await client.update_ai_agent(update_input)
-        result_disabled_at = update_result.get("disabled_at")
+        try:
+            result = await client.create_ai_agent(validated)
+        except AiAgentConfigureError as exc:
+            cause = exc.__cause__
+            if not isinstance(cause, PipefyGraphQLError):
+                raise
+            # Keep the "message (CODE)" form the CLI prints for other GraphQL errors.
+            raise AiAgentConfigureError(
+                agent_uuid=exc.agent_uuid,
+                disabled_at=exc.disabled_at,
+                reason=_format_transport_query_error(cause),
+            ) from cause
+        agent_uuid = result["agent_uuid"]
         out: dict[str, Any] = {
             "success": True,
             "agent_uuid": agent_uuid,
             "message": f"Created agent {agent_uuid}",
-            "disabled_at": result_disabled_at,
-            "active": update_result.get("active", result_disabled_at is None),
+            "disabled_at": result["disabled_at"],
+            "active": result["active"],
         }
         if pre.get("warnings"):
             out["preflight"] = pre
@@ -249,15 +245,13 @@ def agent_update(
             raise typer.BadParameter("--data-sources must be a JSON array of strings")
         data_source_ids = list(ds_raw)
 
-    inst = normalize_pipefy_ai_instruction_tokens(instruction.strip())
     try:
-        expanded = expand_behaviors_placeholders(behavior_list)
         validated = UpdateAiAgentInput(
             uuid=uuid.strip(),
             name=name.strip(),
             repo_uuid=repo_uuid.strip(),
-            instruction=inst,
-            behaviors=expanded,
+            instruction=instruction.strip(),
+            behaviors=behavior_list,
             data_source_ids=data_source_ids,
             disabled_at=disabled_at.strip() if disabled_at else None,
         )

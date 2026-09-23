@@ -17,7 +17,7 @@ from _shared.fixture_ids import (
     make_field_id,
     make_pipe_id,
 )
-from pipefy_sdk import PipefyClient, PipefyGraphQLError
+from pipefy_sdk import AiAgentConfigureError, PipefyClient, PipefyGraphQLError
 from pipefy_sdk.models.ai_agent import CreateAiAgentInput, UpdateAiAgentInput
 
 from pipefy_mcp.core.tool_error_envelope import tool_error_message
@@ -75,13 +75,9 @@ class TestCreateAiAgent:
     ):
         mock_pipefy_client.create_ai_agent.return_value = {
             "agent_uuid": "abc-123",
-            "message": "created",
+            "message": "created and configured",
             "disabled_at": None,
-        }
-        mock_pipefy_client.update_ai_agent.return_value = {
-            "agent_uuid": "abc-123",
-            "message": "updated",
-            "disabled_at": None,
+            "active": True,
         }
         async with client_session as session:
             result = await session.call_tool(
@@ -96,11 +92,9 @@ class TestCreateAiAgent:
         assert result.is_error is False
         payload = extract_payload(result)
         assert payload["success"] is True
-        update_arg = mock_pipefy_client.update_ai_agent.call_args[0][0]
-        assert isinstance(update_arg, UpdateAiAgentInput)
-        assert update_arg.data_source_ids == []
         create_arg = mock_pipefy_client.create_ai_agent.call_args[0][0]
         assert isinstance(create_arg, CreateAiAgentInput)
+        assert create_arg.data_source_ids == []
         assert create_arg.disabled_at is None
 
     async def test_service_error_returns_error_payload(
@@ -212,13 +206,9 @@ class TestCreateAiAgent:
     ):
         mock_pipefy_client.create_ai_agent.return_value = {
             "agent_uuid": "new-uuid",
-            "message": "created",
+            "message": "AI Agent created and configured successfully. UUID: new-uuid",
             "disabled_at": None,
-        }
-        mock_pipefy_client.update_ai_agent.return_value = {
-            "agent_uuid": "new-uuid",
-            "message": "updated",
-            "disabled_at": None,
+            "active": True,
         }
         behaviors = [minimal_behavior_dict(name="B1")]
         async with client_session as session:
@@ -234,17 +224,16 @@ class TestCreateAiAgent:
             )
         assert result.is_error is False
         mock_pipefy_client.create_ai_agent.assert_awaited_once()
-        mock_pipefy_client.update_ai_agent.assert_awaited_once()
-        update_arg = mock_pipefy_client.update_ai_agent.call_args[0][0]
-        assert isinstance(update_arg, UpdateAiAgentInput)
-        assert update_arg.uuid == "new-uuid"
-        assert update_arg.name == "Configured Agent"
-        assert update_arg.repo_uuid == "repo-789"
-        assert update_arg.instruction == "Tell users about the pipe"
-        assert len(update_arg.behaviors) == 1
-        assert update_arg.behaviors[0].name == "B1"
-        assert update_arg.behaviors[0].event_id == "card_created"
-        assert update_arg.data_source_ids == ["ds-1", "ds-2"]
+        mock_pipefy_client.update_ai_agent.assert_not_called()
+        create_arg = mock_pipefy_client.create_ai_agent.call_args[0][0]
+        assert isinstance(create_arg, CreateAiAgentInput)
+        assert create_arg.name == "Configured Agent"
+        assert create_arg.repo_uuid == "repo-789"
+        assert create_arg.instruction == "Tell users about the pipe"
+        assert len(create_arg.behaviors) == 1
+        assert create_arg.behaviors[0].name == "B1"
+        assert create_arg.behaviors[0].event_id == "card_created"
+        assert create_arg.data_source_ids == ["ds-1", "ds-2"]
         payload = extract_payload(result)
         assert payload["success"] is True
         if envelope_flag:
@@ -263,13 +252,13 @@ class TestCreateAiAgent:
         extract_payload,
     ):
         stub_disabled_at = "2026-08-04T12:00:00+00:00"
-        mock_pipefy_client.create_ai_agent.return_value = {
-            "agent_uuid": "created-uuid",
-            "message": "AI Agent created successfully. UUID: created-uuid",
-            "disabled_at": stub_disabled_at,
-            "active": False,
-        }
-        mock_pipefy_client.update_ai_agent.side_effect = ValueError("update failed")
+        configure_error = AiAgentConfigureError(
+            agent_uuid="created-uuid",
+            disabled_at=stub_disabled_at,
+            reason="sdk summary",
+        )
+        configure_error.__cause__ = ValueError("update failed")
+        mock_pipefy_client.create_ai_agent.side_effect = configure_error
         async with client_session as session:
             result = await session.call_tool(
                 "create_ai_agent",
@@ -289,8 +278,40 @@ class TestCreateAiAgent:
         assert "error" in payload
         err_msg = tool_error_message(payload)
         assert "update failed" in err_msg
+        assert "sdk summary" not in err_msg
         assert "toggle_ai_agent_status" in err_msg
         assert "disabled" in err_msg.lower()
+
+    async def test_create_expands_template_params_before_the_sdk_call(
+        self,
+        client_session,
+        mock_pipefy_client,
+        extract_payload,
+    ):
+        mock_pipefy_client.create_ai_agent.return_value = {
+            "agent_uuid": "new-uuid",
+            "message": "created and configured",
+            "disabled_at": None,
+            "active": True,
+        }
+        behavior = minimal_behavior_dict(name="B1")
+        behavior["template_params"] = {"field": "123"}
+        behavior["instruction_template"] = "Read %{field:{{field}}}."
+        async with client_session as session:
+            result = await session.call_tool(
+                "create_ai_agent",
+                {
+                    "name": "My Agent",
+                    "repo_uuid": "repo-456",
+                    "instruction": "Use {field:9}.",
+                    "behaviors": [behavior],
+                },
+            )
+        assert extract_payload(result)["success"] is True
+        create_arg = mock_pipefy_client.create_ai_agent.call_args[0][0]
+        assert create_arg.instruction == "Use %{field:9}."
+        abp = create_arg.behaviors[0].action_params.ai_behavior_params
+        assert abp.instruction == "Read %{field:123}."
 
     async def test_update_passes_disabled_at_when_provided(
         self,

@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from _shared.ai_agent_test_payloads import minimal_behavior_dict
-from pipefy_sdk import PipefyClient
+from pipefy_sdk import PipefyClient, PipefyGraphQLError
 from typer.testing import CliRunner
 
 from pipefy_cli.main import app
@@ -378,11 +378,12 @@ def test_agent_create_happy_path_chains_create_then_update(
     """``agent create`` runs preflight, then ``create_ai_agent`` + ``update_ai_agent``."""
     oauth_env("ag-create-ok")
     mock_client = MagicMock()
-    mock_client.create_ai_agent = AsyncMock(
-        return_value={"agent_uuid": "uuid-1", "disabled_at": None}
+    mock_client.create_ai_agent = MethodType(PipefyClient.create_ai_agent, mock_client)
+    mock_client._ai_agent_service.create_agent = AsyncMock(
+        return_value={"agent_uuid": "uuid-1", "disabled_at": "2026-08-04T12:00:00Z"}
     )
     mock_client.update_ai_agent = AsyncMock(
-        return_value={"agent_uuid": "uuid-1", "disabled_at": None}
+        return_value={"agent_uuid": "uuid-1", "disabled_at": None, "active": True}
     )
 
     preflight_ok = {
@@ -436,12 +437,67 @@ def test_agent_create_happy_path_chains_create_then_update(
         "disabled_at": None,
         "active": True,
     }
-    mock_client.create_ai_agent.assert_awaited_once()
-    create_arg = mock_client.create_ai_agent.call_args.args[0]
+    mock_client._ai_agent_service.create_agent.assert_awaited_once()
+    create_arg = mock_client._ai_agent_service.create_agent.call_args.args[0]
     assert create_arg.disabled_at is None
     mock_client.update_ai_agent.assert_awaited_once()
     update_arg = mock_client.update_ai_agent.call_args.args[0]
     assert update_arg.disabled_at is None
+
+
+def test_agent_create_update_failure_prints_created_uuid_and_error_code(
+    runner: CliRunner, clean_pipefy_env, saved_cwd, oauth_env
+):
+    """A failed configure update names the created agent and keeps the GraphQL code."""
+    oauth_env("ag-create-partial")
+    mock_client = MagicMock()
+    mock_client.create_ai_agent = MethodType(PipefyClient.create_ai_agent, mock_client)
+    mock_client._ai_agent_service.create_agent = AsyncMock(
+        return_value={"agent_uuid": "uuid-1", "disabled_at": "2026-08-04T12:00:00Z"}
+    )
+    mock_client.update_ai_agent = AsyncMock(
+        side_effect=PipefyGraphQLError(
+            [{"message": "Invalid", "extensions": {"code": "RECORD_NOT_SAVED"}}]
+        )
+    )
+
+    with (
+        patch(
+            "pipefy_cli.commands._common.get_authenticated_client",
+            return_value=mock_client,
+        ),
+        patch.object(
+            mock_client,
+            "validate_ai_agent_behaviors",
+            new=AsyncMock(
+                return_value={"success": True, "valid": True, "problems": []}
+            ),
+        ),
+    ):
+        r = runner.invoke(
+            app,
+            [
+                "agent",
+                "create",
+                "--repo-uuid",
+                "repo-uuid-1",
+                "--pipe",
+                "1",
+                "--name",
+                "Acme",
+                "--instruction",
+                "Be helpful.",
+                "--behaviors",
+                json.dumps([_AGENT_BEHAVIOR]),
+            ],
+        )
+
+    assert r.exit_code == 1
+    stderr = " ".join(r.stderr.split())
+    assert "uuid-1" in stderr
+    assert "Invalid (RECORD_NOT_SAVED)" in stderr
+    assert "is disabled" in stderr
+    assert "toggle_ai_agent_status" in stderr
 
 
 def test_agent_update_invokes_field_ref_resolution_via_facade(
