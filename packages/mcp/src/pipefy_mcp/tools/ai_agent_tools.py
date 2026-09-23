@@ -17,7 +17,6 @@ from pipefy_sdk.ai_phase_transition_validation import (
     collect_ai_behavior_move_transition_problems,
 )
 from pipefy_sdk.ai_pipe_validation import resolve_and_populate_field_refs
-from pipefy_sdk.ai_preflight import validate_ai_agent_behaviors_sdk
 from pydantic import ValidationError
 
 from pipefy_mcp.tools.ai_tool_helpers import (
@@ -739,8 +738,7 @@ class AiAgentTools:
             if not pid:
                 return build_ai_tool_error("pipe_id must not be blank")
 
-            result = await validate_ai_agent_behaviors_sdk(
-                client,
+            result = await client.validate_ai_agent_behaviors(
                 pid,
                 behaviors,
                 strict_unknown_action_types=strict_unknown_action_types,

@@ -3,6 +3,7 @@
 import asyncio
 import copy
 from datetime import timedelta
+from types import MethodType
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -16,7 +17,7 @@ from _shared.fixture_ids import (
     make_field_id,
     make_pipe_id,
 )
-from pipefy_sdk import PipefyGraphQLError
+from pipefy_sdk import PipefyClient, PipefyGraphQLError
 from pipefy_sdk.models.ai_agent import CreateAiAgentInput, UpdateAiAgentInput
 
 from pipefy_mcp.core.tool_error_envelope import tool_error_message
@@ -42,6 +43,9 @@ def mock_pipefy_client():
     client.get_pipe_members = AsyncMock(return_value={"pipe": {"members": []}})
     client.get_phase_allowed_move_targets = AsyncMock()
     client.get_phase_fields = AsyncMock(return_value={"fields": []})
+    client.validate_ai_agent_behaviors = MethodType(
+        PipefyClient.validate_ai_agent_behaviors, client
+    )
     return client
 
 

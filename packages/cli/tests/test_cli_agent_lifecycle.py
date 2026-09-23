@@ -62,8 +62,9 @@ def test_agent_create_default_sets_preserve_disabled_at_false_on_update_chain(
             "pipefy_cli.commands._common.get_authenticated_client",
             return_value=mock_client,
         ),
-        patch(
-            "pipefy_cli.commands.agent.validate_ai_agent_behaviors_sdk",
+        patch.object(
+            mock_client,
+            "validate_ai_agent_behaviors",
             new=AsyncMock(return_value=_PREFLIGHT_OK),
         ),
         patch(
@@ -130,8 +131,9 @@ def test_agent_create_inactive_sets_disabled_at_on_create_and_update_chain(
             "pipefy_cli.commands._common.get_authenticated_client",
             return_value=mock_client,
         ),
-        patch(
-            "pipefy_cli.commands.agent.validate_ai_agent_behaviors_sdk",
+        patch.object(
+            mock_client,
+            "validate_ai_agent_behaviors",
             new=AsyncMock(return_value=_PREFLIGHT_OK),
         ),
         patch(
@@ -193,8 +195,9 @@ def test_agent_update_json_exposes_active_when_disabled_at_null(
             "pipefy_cli.commands._common.get_authenticated_client",
             return_value=mock_client,
         ),
-        patch(
-            "pipefy_cli.commands.agent.validate_ai_agent_behaviors_sdk",
+        patch.object(
+            mock_client,
+            "validate_ai_agent_behaviors",
             new=AsyncMock(return_value=_PREFLIGHT_OK),
         ),
         patch(
@@ -250,8 +253,9 @@ def test_agent_update_json_exposes_active_false_when_disabled(
             "pipefy_cli.commands._common.get_authenticated_client",
             return_value=mock_client,
         ),
-        patch(
-            "pipefy_cli.commands.agent.validate_ai_agent_behaviors_sdk",
+        patch.object(
+            mock_client,
+            "validate_ai_agent_behaviors",
             new=AsyncMock(return_value=_PREFLIGHT_OK),
         ),
         patch(
@@ -307,8 +311,9 @@ def test_agent_update_passes_disabled_at_when_provided(
             "pipefy_cli.commands._common.get_authenticated_client",
             return_value=mock_client,
         ),
-        patch(
-            "pipefy_cli.commands.agent.validate_ai_agent_behaviors_sdk",
+        patch.object(
+            mock_client,
+            "validate_ai_agent_behaviors",
             new=AsyncMock(return_value=_PREFLIGHT_OK),
         ),
         patch(

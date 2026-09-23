@@ -11,7 +11,6 @@ from pipefy_sdk import (
     PipefyClient,
     UpdateAiAgentInput,
 )
-from pipefy_sdk.ai_preflight import validate_ai_agent_behaviors_sdk
 from pipefy_sdk.behavior_placeholders import (
     expand_behaviors_placeholders,
     normalize_pipefy_ai_instruction_tokens,
@@ -160,8 +159,7 @@ def agent_create(
         raise typer.BadParameter(str(exc)) from exc
 
     async def factory(client: PipefyClient):
-        pre = await validate_ai_agent_behaviors_sdk(
-            client,
+        pre = await client.validate_ai_agent_behaviors(
             pipe.strip(),
             [b.model_dump(by_alias=True) for b in validated.behaviors],
             strict_unknown_action_types=strict_unknown,
@@ -267,8 +265,7 @@ def agent_update(
         raise typer.BadParameter(str(exc)) from exc
 
     async def factory(client: PipefyClient):
-        pre = await validate_ai_agent_behaviors_sdk(
-            client,
+        pre = await client.validate_ai_agent_behaviors(
             pipe.strip(),
             [b.model_dump(by_alias=True) for b in validated.behaviors],
             strict_unknown_action_types=strict_unknown,
@@ -394,8 +391,7 @@ def agent_validate_behaviors(
     behavior_list = _parse_behaviors_json(behaviors)
 
     async def factory(client: PipefyClient):
-        return await validate_ai_agent_behaviors_sdk(
-            client,
+        return await client.validate_ai_agent_behaviors(
             pipe.strip(),
             behavior_list,
             strict_unknown_action_types=strict_unknown,

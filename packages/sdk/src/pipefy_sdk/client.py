@@ -10,6 +10,10 @@ from httpx import Auth
 
 from pipefy_sdk import __version__
 from pipefy_sdk.ai_pipe_validation import resolve_and_populate_field_refs
+from pipefy_sdk.ai_preflight import (
+    validate_ai_agent_behaviors_sdk,
+    validate_ai_automation_prompt_sdk,
+)
 from pipefy_sdk.automation_input import normalize_automation_input_keys
 from pipefy_sdk.automation_preflight import (
     validate_automation_field_map_field_ids,
@@ -1438,6 +1442,45 @@ class PipefyClient:
     ) -> AutomationServiceResult:
         """Update an existing AI Automation via the public ``updateAutomation``."""
         return await self._automation_service.update_ai_automation(automation_input)
+
+    async def validate_ai_agent_behaviors(
+        self,
+        pipe_id: str,
+        behaviors: list[dict[str, Any]],
+        *,
+        strict_unknown_action_types: bool = True,
+        data_source_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Dry-run AI Agent behaviors against a pipe's fields, phases, and relations (read-only).
+
+        Call before :meth:`create_ai_agent` / :meth:`update_ai_agent`. Delegates to
+        :func:`pipefy_sdk.ai_preflight.validate_ai_agent_behaviors_sdk`; see it for the
+        checks and the ``{success, valid, problems, warnings, message}`` result.
+        """
+        return await validate_ai_agent_behaviors_sdk(
+            self,
+            pipe_id,
+            behaviors,
+            strict_unknown_action_types=strict_unknown_action_types,
+            data_source_ids=data_source_ids,
+        )
+
+    async def validate_ai_automation_prompt(
+        self,
+        pipe_id: str,
+        prompt: str,
+        field_ids: list[str],
+        event_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Pre-flight an AI Automation prompt, output fields, and trigger (read-only).
+
+        Call before :meth:`create_ai_automation`. Delegates to
+        :func:`pipefy_sdk.ai_preflight.validate_ai_automation_prompt_sdk`; see it for the
+        checks and the ``{success, valid, problems, warnings, field_map}`` result.
+        """
+        return await validate_ai_automation_prompt_sdk(
+            self, pipe_id, prompt, field_ids, event_id
+        )
 
     async def get_pipe_members(self, pipe_id: str | int) -> dict:
         """Get the members of a pipe."""

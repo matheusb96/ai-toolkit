@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+from types import MethodType
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from _shared.ai_agent_test_payloads import minimal_behavior_dict
+from pipefy_sdk import PipefyClient
 from typer.testing import CliRunner
 
 from pipefy_cli.main import app
@@ -17,6 +19,9 @@ def test_agent_validate_behaviors_json(
 ):
     oauth_env("ag-val")
     mock_client = MagicMock()
+    mock_client.validate_ai_agent_behaviors = MethodType(
+        PipefyClient.validate_ai_agent_behaviors, mock_client
+    )
     mock_client.get_pipe = AsyncMock(
         return_value={"pipe": {"phases": [], "start_form_fields": []}}
     )
@@ -131,6 +136,9 @@ def test_ai_automation_validate_prompt_json(
 ):
     oauth_env("ai-val")
     mock_client = MagicMock()
+    mock_client.validate_ai_automation_prompt = MethodType(
+        PipefyClient.validate_ai_automation_prompt, mock_client
+    )
     mock_client.get_pipe_with_preferences = AsyncMock(
         return_value={
             "pipe": {
@@ -390,8 +398,9 @@ def test_agent_create_happy_path_chains_create_then_update(
             "pipefy_cli.commands._common.get_authenticated_client",
             return_value=mock_client,
         ),
-        patch(
-            "pipefy_cli.commands.agent.validate_ai_agent_behaviors_sdk",
+        patch.object(
+            mock_client,
+            "validate_ai_agent_behaviors",
             new=AsyncMock(return_value=preflight_ok),
         ),
         patch(
@@ -474,8 +483,9 @@ def test_agent_update_invokes_field_ref_resolution_via_facade(
             "pipefy_cli.commands._common.get_authenticated_client",
             return_value=client,
         ),
-        patch(
-            "pipefy_cli.commands.agent.validate_ai_agent_behaviors_sdk",
+        patch.object(
+            client,
+            "validate_ai_agent_behaviors",
             new=AsyncMock(return_value=preflight_ok),
         ),
         patch(
@@ -531,8 +541,9 @@ def test_agent_create_blocks_when_preflight_invalid(
             "pipefy_cli.commands._common.get_authenticated_client",
             return_value=mock_client,
         ),
-        patch(
-            "pipefy_cli.commands.agent.validate_ai_agent_behaviors_sdk",
+        patch.object(
+            mock_client,
+            "validate_ai_agent_behaviors",
             new=AsyncMock(return_value=preflight_block),
         ),
     ):
@@ -629,6 +640,9 @@ def test_ai_automation_create_succeeds_without_service_account(
     """
     oauth_env("ai-create-public")
     mock_client = MagicMock()
+    mock_client.validate_ai_automation_prompt = MethodType(
+        PipefyClient.validate_ai_automation_prompt, mock_client
+    )
     # Prompt references field 9 as input; output field 88 is distinct so overlap preflight passes.
     mock_client.get_pipe_with_preferences = AsyncMock(
         return_value={
@@ -935,6 +949,9 @@ def test_ai_automation_update_auto_fetches_prompt_when_omitted(
     # Prompt references field 9 as input; output field 88 is distinct so overlap preflight passes.
     existing = _ai_automation_row("Summarize: %{9}", ["88"])
     mock_client = MagicMock()
+    mock_client.validate_ai_automation_prompt = MethodType(
+        PipefyClient.validate_ai_automation_prompt, mock_client
+    )
     mock_client.get_automation = AsyncMock(return_value=existing)
     mock_client.get_pipe_with_preferences = AsyncMock(
         return_value={
