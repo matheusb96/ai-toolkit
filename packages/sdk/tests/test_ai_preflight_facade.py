@@ -106,3 +106,40 @@ async def test_validate_ai_automation_prompt_rejects_unknown_event(
 
     assert result["valid"] is False
     assert any("card_moved" in p for p in result["problems"])
+
+
+@pytest.mark.anyio
+async def test_validate_ai_agent_behaviors_pipe_read_failure_reports_in_problems(
+    facade_client: PipefyClient,
+):
+    facade_client.get_pipe.side_effect = RuntimeError("denied")
+    behavior = minimal_behavior_dict(pipe_id=EXAMPLE_PIPE_ID, field_id=FIELD_ID)
+
+    result = await facade_client.validate_ai_agent_behaviors(
+        EXAMPLE_PIPE_ID, [behavior]
+    )
+
+    assert result == {
+        "success": False,
+        "valid": False,
+        "problems": [f"Failed to fetch pipe {EXAMPLE_PIPE_ID}: denied"],
+        "warnings": [],
+        "message": "Pipe fetch failed.",
+    }
+
+
+@pytest.mark.anyio
+async def test_validate_ai_automation_prompt_pipe_read_failure_returns_error_only(
+    facade_client: PipefyClient,
+):
+    facade_client.get_pipe_with_preferences.side_effect = RuntimeError("denied")
+
+    result = await facade_client.validate_ai_automation_prompt(
+        "1", f"Summarize %{{{FIELD_ID}}}", ["900000002"]
+    )
+
+    assert result == {
+        "success": False,
+        "valid": False,
+        "error": "Failed to fetch pipe 1: denied",
+    }
