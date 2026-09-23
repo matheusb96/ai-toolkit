@@ -18,6 +18,7 @@ from pipefy_sdk.graphql_problem import (
     classify_exception,
     classify_graphql_error_dicts,
 )
+from pipefy_sdk.member_removal import MemberRemovalResult
 from pipefy_sdk.models import (
     CONDITION_OPERATIONS,
     Attachment,
@@ -157,6 +158,7 @@ __all__ = [
     "filter_fields_by_definitions",
     "MePayload",
     "MemberInvite",
+    "MemberRemovalResult",
     "NonBlankStr",
     "PipefyAPIError",
     "PipefyClient",
