@@ -849,8 +849,11 @@ async def test_create_ai_agent_update_failure_raises_configure_error():
     assert excinfo.value.agent_uuid == "new-1"
     assert excinfo.value.disabled_at == "2026-08-04T12:00:00Z"
     assert excinfo.value.__cause__ is cause
-    assert "new-1" in str(excinfo.value)
-    assert "RECORD_NOT_SAVED" in str(excinfo.value)
+    message = str(excinfo.value)
+    assert "new-1" in message
+    assert "RECORD_NOT_SAVED" in message
+    assert "is disabled" in message
+    assert "toggle_ai_agent_status" in message
 
 
 @pytest.mark.unit

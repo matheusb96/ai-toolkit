@@ -493,8 +493,11 @@ def test_agent_create_update_failure_prints_created_uuid_and_error_code(
         )
 
     assert r.exit_code == 1
-    assert "uuid-1" in r.stderr
-    assert "Invalid (RECORD_NOT_SAVED)" in r.stderr
+    stderr = " ".join(r.stderr.split())
+    assert "uuid-1" in stderr
+    assert "Invalid (RECORD_NOT_SAVED)" in stderr
+    assert "is disabled" in stderr
+    assert "toggle_ai_agent_status" in stderr
 
 
 def test_agent_update_invokes_field_ref_resolution_via_facade(

@@ -34,7 +34,7 @@ The hierarchy:
 - **`PipefyError`** — root of the API error types below.
 - **`PipefyAPIError`** — the API returned an error payload.
 - **`PipefyGraphQLError`** — a GraphQL response carried `errors`. Subclasses `PipefyAPIError`, and carries the raw list on `.errors`. This is what most failures arrive as.
-- **`AiAgentConfigureError`** — `create_ai_agent` created the agent, but the update that writes its instruction and behaviors failed. The agent exists: `.agent_uuid` identifies it for a recovery `update_ai_agent` or a `delete_ai_agent`, and `.disabled_at` is the create's `disabledAt`. The update's own error is `__cause__`.
+- **`AiAgentConfigureError`** — `create_ai_agent` created the agent, but the update that writes its instruction and behaviors failed. The agent exists, and it is disabled when `.disabled_at` (the create's `disabledAt`) is set. To recover, write its behaviors with `update_ai_agent(agent_uuid, ...)`, which keeps it disabled, then activate it with `toggle_ai_agent_status`. To discard it, call `delete_ai_agent`. The error message says the same. The update's own error is `__cause__`.
 
 Catch the specific type before the root, since `except PipefyError` also catches
 `PipefyGraphQLError` and would otherwise shadow it.
