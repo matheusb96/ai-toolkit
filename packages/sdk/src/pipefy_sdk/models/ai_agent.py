@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Annotated, Any, Self
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
@@ -424,7 +425,8 @@ def _expand_raw_behaviors(value: object) -> object:
     """
     from pipefy_sdk.behavior_placeholders import expand_behavior_placeholders
 
-    if not isinstance(value, list):
+    # Any iterable, not only list: pydantic also coerces tuples and generators.
+    if isinstance(value, (str, bytes, dict)) or not isinstance(value, Iterable):
         return value
     return [
         expand_behavior_placeholders(b) if isinstance(b, dict) else b for b in value

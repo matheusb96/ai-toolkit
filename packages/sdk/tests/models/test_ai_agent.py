@@ -897,4 +897,20 @@ def test_agent_input_does_not_expand_behavior_input_instances_again():
         uuid="agent-1", name="A", repo_uuid="repo-1", behaviors=[validated]
     )
     assert inp.behaviors[0] is validated
-    assert inp.instruction is None
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "wrap",
+    [tuple, lambda items: (b for b in items)],
+    ids=["tuple", "generator"],
+)
+def test_agent_input_expands_behaviors_from_any_iterable(wrap):
+    inp = CreateAiAgentInput(
+        name="A",
+        repo_uuid="repo-1",
+        instruction="P",
+        behaviors=wrap([_templated_behavior()]),
+    )
+    abp = inp.behaviors[0].action_params.ai_behavior_params
+    assert abp.instruction == "Read %{field:123} and %{field:456}."
