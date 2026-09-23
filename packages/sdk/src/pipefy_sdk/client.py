@@ -1476,7 +1476,8 @@ class PipefyClient:
 
         Call before :meth:`create_ai_automation`. Delegates to
         :func:`pipefy_sdk.ai_preflight.validate_ai_automation_prompt_sdk`; see it for the
-        checks and the ``{success, valid, problems, warnings, field_map}`` result.
+        checks and the ``{success, valid, problems, warnings, field_map}`` result. A failed
+        pipe read returns only ``{success, valid, error}``, with ``success`` false.
         """
         return await validate_ai_automation_prompt_sdk(
             self, pipe_id, prompt, field_ids, event_id
