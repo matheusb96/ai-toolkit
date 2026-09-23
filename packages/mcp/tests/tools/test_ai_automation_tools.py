@@ -1,6 +1,7 @@
 """Tests for AI Automation MCP tools."""
 
 from datetime import timedelta
+from types import MethodType
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -29,6 +30,9 @@ def mock_pipefy_client():
     client.get_pipe_with_preferences = AsyncMock()
     client.get_automation_events = AsyncMock()
     client.get_ai_credit_usage = AsyncMock()
+    client.validate_ai_automation_prompt = MethodType(
+        PipefyClient.validate_ai_automation_prompt, client
+    )
     return client
 
 

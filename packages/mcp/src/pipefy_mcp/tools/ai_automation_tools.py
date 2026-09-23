@@ -10,10 +10,7 @@ from pipefy_sdk import (
     PipefyId,
     UpdateAiAutomationInput,
 )
-from pipefy_sdk.ai_preflight import (
-    filter_ai_automation_summaries,
-    validate_ai_automation_prompt_sdk,
-)
+from pipefy_sdk.ai_preflight import filter_ai_automation_summaries
 from pydantic import ValidationError
 
 from pipefy_mcp.core.tool_error_envelope import tool_error_message
@@ -116,8 +113,7 @@ class AiAutomationTools:
                     }
                 eid = eid_validated or None
 
-            result = await validate_ai_automation_prompt_sdk(
-                client,
+            result = await client.validate_ai_automation_prompt(
                 pid,
                 prompt,
                 [str(f) for f in field_ids],

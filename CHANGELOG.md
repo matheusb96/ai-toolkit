@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **SDK pre-write validation**: `PipefyClient.validate_ai_agent_behaviors` and `PipefyClient.validate_ai_automation_prompt` expose the two read-only validators as client methods, with the MCP tool names and parameters, so an agent that builds its tools from `PipefyClient` can validate before it writes. The MCP tools and CLI commands now call these methods. The `pipefy_sdk.ai_preflight` module functions stay. (#694)
+
 ### Fixed
 
 - **Automation listings**: SDK, MCP, and CLI now return trigger IDs, event parameters, conditions, `actionEnabled`, and `disabledReason` for organization and pipe listings, avoiding a detail call per rule to audit its filters and whether the action is enabled. Listings are paged: the API caps a page at 50 rules, so `get_automations` / `pipefy automation list` accept `first` / `after` and report `totalCount` and `hasNextPage` instead of silently returning the first 50. `get_ai_automations` / `pipefy ai-automation list` expose the same page block for the mixed connection they filter. Human `pipefy automation list` prints a table of each row's scalar columns plus the page counts, leaving the nested `event_params` and `condition` to `--json`. Phase-delete preview follows every page of rules, reads their details under a concurrency bound instead of one simultaneous call per rule, and says when the dependents list is a lower bound because a page or a detail read failed. An empty pipe no longer fails `get_automation_logs_by_repo`. The last page of an audit names itself so `11 of 61` is not read as a shortfall. (#612)

@@ -11,10 +11,7 @@ from pipefy_sdk import (
     PipefyClient,
     UpdateAiAutomationInput,
 )
-from pipefy_sdk.ai_preflight import (
-    filter_ai_automation_summaries,
-    validate_ai_automation_prompt_sdk,
-)
+from pipefy_sdk.ai_preflight import filter_ai_automation_summaries
 from pydantic import ValidationError
 
 from pipefy_cli.commands._common import (
@@ -166,8 +163,8 @@ def ai_automation_validate_prompt(
     fids = _parse_field_ids(field_ids)
 
     async def factory(client: PipefyClient):
-        return await validate_ai_automation_prompt_sdk(
-            client, pipe.strip(), prompt, fids, event_id
+        return await client.validate_ai_automation_prompt(
+            pipe.strip(), prompt, fids, event_id
         )
 
     run_cli_command(ctx, json_out, factory)
@@ -213,8 +210,8 @@ def ai_automation_create(
         skills = list(skills_raw)
 
     async def factory(client: PipefyClient):
-        pre = await validate_ai_automation_prompt_sdk(
-            client, pipe.strip(), prompt, fids, event_id
+        pre = await client.validate_ai_automation_prompt(
+            pipe.strip(), prompt, fids, event_id
         )
         _raise_if_prompt_preflight_blocks(pre)
         try:
@@ -304,8 +301,7 @@ def ai_automation_update(
                 "Pass --prompt and --field-ids explicitly."
             )
         ev = str(row.get("event_id") or "")
-        pre = await validate_ai_automation_prompt_sdk(
-            client,
+        pre = await client.validate_ai_automation_prompt(
             pipe.strip(),
             effective_prompt,
             effective_fids,

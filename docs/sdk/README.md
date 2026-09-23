@@ -48,6 +48,15 @@ Other exported error types sit outside this root. Catch these by name:
 Transport-level failures (connection refused, timeouts) surface as `gql`'s
 `TransportError`, which the SDK does not wrap.
 
+## Pre-write validation
+
+Two read-only `PipefyClient` methods dry-run a write before you make it. They have the same names and parameters as the MCP tools, and they never persist anything:
+
+- **`validate_ai_agent_behaviors(pipe_id, behaviors, *, strict_unknown_action_types=True, data_source_ids=None)`** checks a behavior list against the pipe's fields, phases, relations, phase transitions, and knowledge bases. Call it before `create_ai_agent` / `update_ai_agent`.
+- **`validate_ai_automation_prompt(pipe_id, prompt, field_ids, event_id=None)`** checks the prompt's `%{internal_id}` references, the output `field_ids`, the optional trigger, and whether AI is enabled for the pipe and the organization. Call it before `create_ai_automation`.
+
+Both return a dict. `valid` is true only when `problems` is empty, and `warnings` holds non-blocking notices. The agent result adds a `message`; the prompt result adds a `field_map` of the referenced field IDs to their labels. A failed pipe read sets `success` to false instead of raising: the agent result then gives the reason in `problems`, and the prompt result carries only `success`, `valid`, and `error`.
+
 ## Configuration
 
 OAuth and endpoint variables are documented in **[`../config.md`](../config.md)** and **[`../../.env.example`](../../.env.example)**. Integration tests use `@pytest.mark.integration` and the same `PIPEFY_*` keys from local **`.env`** (e.g. `PIPEFY_PORTAL_ORG_UUID` for portal live tests). Unit tests use fictional ids in **[`../../packages/sdk/tests/_shared/fixture_ids.py`](../../packages/sdk/tests/_shared/fixture_ids.py)** — not production org UUIDs.
