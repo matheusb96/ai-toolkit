@@ -1408,18 +1408,19 @@ class PipefyClient:
         """
         created = await self._ai_agent_service.create_agent(agent_input)
         agent_uuid = created["agent_uuid"]
-        update_input = UpdateAiAgentInput(
-            uuid=agent_uuid,
-            name=agent_input.name,
-            repo_uuid=agent_input.repo_uuid,
-            instruction=agent_input.instruction,
-            behaviors=agent_input.behaviors,
-            data_source_ids=agent_input.data_source_ids,
-            disabled_at=agent_input.disabled_at,
-            preserve_disabled_at=False,
-        )
         try:
-            updated = await self.update_ai_agent(update_input)
+            updated = await self.update_ai_agent(
+                UpdateAiAgentInput(
+                    uuid=agent_uuid,
+                    name=agent_input.name,
+                    repo_uuid=agent_input.repo_uuid,
+                    instruction=agent_input.instruction,
+                    behaviors=agent_input.behaviors,
+                    data_source_ids=agent_input.data_source_ids,
+                    disabled_at=agent_input.disabled_at,
+                    preserve_disabled_at=False,
+                )
+            )
         except Exception as exc:
             raise AiAgentConfigureError(
                 agent_uuid=agent_uuid,
