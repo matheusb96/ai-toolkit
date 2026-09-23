@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from types import MethodType
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from pipefy_sdk import PipefyClient
 from typer.testing import CliRunner
 
 from pipefy_cli.main import app
@@ -42,7 +44,8 @@ def test_agent_create_default_sets_preserve_disabled_at_false_on_update_chain(
     """Default ``agent create`` passes ``preserve_disabled_at=False`` on chained update."""
     oauth_env("ag-create-active")
     mock_client = MagicMock()
-    mock_client.create_ai_agent = AsyncMock(
+    mock_client.create_ai_agent = MethodType(PipefyClient.create_ai_agent, mock_client)
+    mock_client._ai_agent_service.create_agent = AsyncMock(
         return_value={
             "agent_uuid": "active-uuid",
             "disabled_at": "2026-08-04T12:00:00+00:00",
@@ -97,7 +100,7 @@ def test_agent_create_default_sets_preserve_disabled_at_false_on_update_chain(
     assert body["disabled_at"] is None
     assert body["active"] is True
 
-    create_arg = mock_client.create_ai_agent.call_args.args[0]
+    create_arg = mock_client._ai_agent_service.create_agent.call_args.args[0]
     assert create_arg.disabled_at is None
     update_arg = mock_client.update_ai_agent.call_args.args[0]
     assert update_arg.disabled_at is None
@@ -111,7 +114,8 @@ def test_agent_create_inactive_sets_disabled_at_on_create_and_update_chain(
     oauth_env("ag-create-inactive")
     stub_disabled_at = "2026-08-04T13:00:00+00:00"
     mock_client = MagicMock()
-    mock_client.create_ai_agent = AsyncMock(
+    mock_client.create_ai_agent = MethodType(PipefyClient.create_ai_agent, mock_client)
+    mock_client._ai_agent_service.create_agent = AsyncMock(
         return_value={
             "agent_uuid": "inactive-uuid",
             "disabled_at": stub_disabled_at,
@@ -167,7 +171,7 @@ def test_agent_create_inactive_sets_disabled_at_on_create_and_update_chain(
     assert body["disabled_at"] == stub_disabled_at
     assert body["active"] is False
 
-    create_arg = mock_client.create_ai_agent.call_args.args[0]
+    create_arg = mock_client._ai_agent_service.create_agent.call_args.args[0]
     assert create_arg.disabled_at is not None
     datetime.fromisoformat(create_arg.disabled_at)
     update_arg = mock_client.update_ai_agent.call_args.args[0]

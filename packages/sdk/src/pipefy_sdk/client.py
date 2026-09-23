@@ -19,6 +19,7 @@ from pipefy_sdk.automation_preflight import (
     validate_automation_field_map_field_ids,
     validate_traditional_automation_move_transition,
 )
+from pipefy_sdk.exceptions import AiAgentConfigureError
 from pipefy_sdk.graphql_executor import (
     AuthenticatedExecutor,
     GraphQLEndpoint,
@@ -1393,13 +1394,42 @@ class PipefyClient:
     async def create_ai_agent(
         self, agent_input: CreateAiAgentInput
     ) -> AgentServiceResult:
-        """Create an AI Agent (empty, no behaviors).
+        """Create an AI Agent and write its instruction and behaviors.
 
-        Callers are still responsible for pre-Pydantic prep (``normalize_pipefy_ai_instruction_tokens``
-        / ``expand_behaviors_placeholders``) where applicable because those run before
-        :class:`CreateAiAgentInput` validation at the tool/CLI boundary.
+        Runs ``createAiAgent`` and then :meth:`update_ai_agent`. The API stamps
+        ``disabledAt`` on a new agent, and only an update with an active behavior
+        clears it, so the update omits ``disabledAt`` unless ``agent_input.disabled_at``
+        is set. Placeholder and token prep happen when :class:`CreateAiAgentInput`
+        validates.
+
+        Raises:
+            AiAgentConfigureError: The agent was created but the update failed. It
+                carries ``agent_uuid`` for recovery; the update's error is ``__cause__``.
         """
-        return await self._ai_agent_service.create_agent(agent_input)
+        created = await self._ai_agent_service.create_agent(agent_input)
+        agent_uuid = created["agent_uuid"]
+        update_input = UpdateAiAgentInput(
+            uuid=agent_uuid,
+            name=agent_input.name,
+            repo_uuid=agent_input.repo_uuid,
+            instruction=agent_input.instruction,
+            behaviors=agent_input.behaviors,
+            data_source_ids=agent_input.data_source_ids,
+            disabled_at=agent_input.disabled_at,
+            preserve_disabled_at=False,
+        )
+        try:
+            updated = await self.update_ai_agent(update_input)
+        except Exception as exc:
+            raise AiAgentConfigureError(
+                agent_uuid=agent_uuid,
+                disabled_at=created["disabled_at"],
+                reason=str(exc),
+            ) from exc
+        return {
+            **updated,
+            "message": f"AI Agent created and configured successfully. UUID: {agent_uuid}",
+        }
 
     async def update_ai_agent(
         self, agent_input: UpdateAiAgentInput
@@ -1408,10 +1438,8 @@ class PipefyClient:
 
         Resolves field-slug references inside behaviors to numeric IDs and
         populates ``referencedFieldIds`` before calling the service, so
-        callers do not need to remember the prep step. Callers are still
-        responsible for pre-Pydantic prep (``normalize_pipefy_ai_instruction_tokens``
-        / ``expand_behaviors_placeholders``) because those run before
-        :class:`UpdateAiAgentInput` validation.
+        callers do not need to remember the prep step. Placeholder and token
+        prep happen when :class:`UpdateAiAgentInput` validates.
         """
         raw_behaviors = [b.model_dump(by_alias=True) for b in agent_input.behaviors]
         resolved_dicts = await resolve_and_populate_field_refs(self, raw_behaviors)

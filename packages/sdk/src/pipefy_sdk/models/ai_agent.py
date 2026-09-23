@@ -404,23 +404,67 @@ class BehaviorInput(BaseModel):
         return self
 
 
-class CreateAiAgentInput(BaseModel):
-    """Validated input for create-and-configure: name/repo_uuid plus optional disabled_at for inactive create."""
+def _normalize_agent_instruction(value: object) -> object:
+    """Rewrite instruction token aliases to the canonical ``%{field:…}`` / ``%{action:…}`` form."""
+    # Deferred: behavior_placeholders imports pipefy_sdk.models.
+    from pipefy_sdk.behavior_placeholders import normalize_pipefy_ai_instruction_tokens
 
-    name: NonBlankStr
-    repo_uuid: NonBlankStr
-    instruction: NonBlankStr
-    behaviors: list[BehaviorInput] = Field(
+    return (
+        normalize_pipefy_ai_instruction_tokens(value)
+        if isinstance(value, str)
+        else value
+    )
+
+
+def _expand_raw_behaviors(value: object) -> object:
+    """Expand ``{{placeholders}}`` and normalize tokens in raw behavior dicts.
+
+    ``BehaviorInput`` instances pass through as they are: expansion is not
+    idempotent, so a behavior that was already validated is never expanded again.
+    """
+    from pipefy_sdk.behavior_placeholders import expand_behavior_placeholders
+
+    if not isinstance(value, list):
+        return value
+    return [
+        expand_behavior_placeholders(b) if isinstance(b, dict) else b for b in value
+    ]
+
+
+_AgentInstruction = Annotated[str, BeforeValidator(_normalize_agent_instruction)]
+_AgentBehaviors = Annotated[
+    list[BehaviorInput],
+    BeforeValidator(_expand_raw_behaviors),
+    Field(
         min_length=1,
         max_length=MAX_BEHAVIORS,
         description="List of behaviors (1 to MAX_BEHAVIORS)",
-    )
+    ),
+]
+
+
+class CreateAiAgentInput(BaseModel):
+    """Validated input for create-and-configure (``PipefyClient.create_ai_agent``).
+
+    Raw behavior dicts (not ``BehaviorInput`` instances) get the same prep as the
+    MCP tools: ``template_params`` / ``placeholders`` and ``instruction_template``
+    are expanded, and instruction token aliases are normalized, on the agent
+    ``instruction`` and on each behavior's. ``disabled_at`` creates the agent inactive.
+    """
+
+    name: NonBlankStr
+    repo_uuid: NonBlankStr
+    instruction: Annotated[NonBlankStr, BeforeValidator(_normalize_agent_instruction)]
+    behaviors: _AgentBehaviors
     data_source_ids: list[str] = Field(default_factory=list)
     disabled_at: NonBlankStr | None = None
 
 
 class UpdateAiAgentInput(BaseModel):
     """Validated input for updating an AI Agent.
+
+    Raw behavior dicts and ``instruction`` get the same prep as on
+    :class:`CreateAiAgentInput`.
 
     Prefer passing ``disabled_at`` from a prior ``get_ai_agent`` read (pass-through;
     skips the preserve re-read). When ``preserve_disabled_at`` is True (default) and
@@ -433,12 +477,8 @@ class UpdateAiAgentInput(BaseModel):
     uuid: NonBlankStr
     name: NonBlankStr
     repo_uuid: NonBlankStr
-    behaviors: list[BehaviorInput] = Field(
-        min_length=1,
-        max_length=MAX_BEHAVIORS,
-        description="List of behaviors (1 to MAX_BEHAVIORS)",
-    )
-    instruction: str | None = None
+    behaviors: _AgentBehaviors
+    instruction: _AgentInstruction | None = None
     data_source_ids: list[str] = Field(default_factory=list)
     disabled_at: NonBlankStr | None = None
     preserve_disabled_at: bool = True

@@ -201,7 +201,7 @@ On create/update, slug `fieldId` values are resolved to numeric `internal_id`, `
 ### 8 — Handle responses
 
 - **Success with `agent_uuid`** → confirm `disabled_at` / `active` on the response (active when `disabled_at` is null).
-- **Partial failure (UUID returned, behaviors rejected)** → call `update_ai_agent` with the **full required payload**: `uuid`, `repo_uuid` (same pipe UUID used on create), `name`, `instruction`, and complete `behaviors` (full-replace, not patch). Do NOT create a second agent. The create shell is often disabled (`disabled_at` on the partial-failure envelope); update preserves that state — call `toggle_ai_agent_status` after a successful recovery update if you need the agent active.
+- **Partial failure (UUID returned, behaviors rejected)** — the MCP envelope carries `agent_uuid`; the SDK raises `AiAgentConfigureError` with `.agent_uuid` → call `update_ai_agent` with the **full required payload**: `uuid`, `repo_uuid` (same pipe UUID used on create), `name`, `instruction`, and complete `behaviors` (full-replace, not patch). Do NOT create a second agent. The create shell is often disabled (`disabled_at` on the partial-failure envelope); update preserves that state — call `toggle_ai_agent_status` after a successful recovery update if you need the agent active.
 - **Failure without UUID** → validation or API error. Trust the hint text in the enriched error.
 
 ### 9 — Verify
@@ -274,7 +274,7 @@ Instructions accept five token aliases — all normalize to canonical `%{field:<
 
 ## Template params / placeholders
 
-Per behavior you can pass `template_params` (or `placeholders`) with `str → str` values and use `{{name}}` in any string (instruction, metadata IDs, etc.). Optionally set `instruction_template` instead of `aiBehaviorParams.instruction` — the tool interpolates and writes the final instruction before the API call. These keys are stripped before validation.
+Per behavior you can pass `template_params` (or `placeholders`) with `str → str` values and use `{{name}}` in any string (instruction, metadata IDs, etc.). Optionally set `instruction_template` instead of `aiBehaviorParams.instruction` — the final instruction is interpolated and written before the API call (by the MCP tools, the CLI, and the SDK's `CreateAiAgentInput` / `UpdateAiAgentInput`). These keys are stripped during validation.
 
 ```json
 {

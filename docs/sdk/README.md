@@ -34,6 +34,7 @@ The hierarchy:
 - **`PipefyError`** — root of the API error types below.
 - **`PipefyAPIError`** — the API returned an error payload.
 - **`PipefyGraphQLError`** — a GraphQL response carried `errors`. Subclasses `PipefyAPIError`, and carries the raw list on `.errors`. This is what most failures arrive as.
+- **`AiAgentConfigureError`** — `create_ai_agent` created the agent, but the update that writes its instruction and behaviors failed. The agent exists: `.agent_uuid` identifies it for a recovery `update_ai_agent` or a `delete_ai_agent`, and `.disabled_at` is the create's `disabledAt`. The update's own error is `__cause__`.
 
 Catch the specific type before the root, since `except PipefyError` also catches
 `PipefyGraphQLError` and would otherwise shadow it.
@@ -47,6 +48,17 @@ Other exported error types sit outside this root. Catch these by name:
 
 Transport-level failures (connection refused, timeouts) surface as `gql`'s
 `TransportError`, which the SDK does not wrap.
+
+## AI agents
+
+`create_ai_agent(CreateAiAgentInput(...))` creates the agent and then calls `update_ai_agent` to write its `instruction`, `behaviors`, and `data_source_ids`. The API disables a new agent until an update with an active behavior clears `disabledAt`, so the chained update omits `disabledAt` unless you set `disabled_at` to create the agent inactive. If that update fails, the method raises `AiAgentConfigureError` (see [Errors](#errors)).
+
+`CreateAiAgentInput` and `UpdateAiAgentInput` prepare raw behavior dicts while they validate, the same way as the MCP tools:
+
+- `template_params` (or `placeholders`) fill `{{name}}` in every string of the behavior, and `instruction_template` becomes `actionParams.aiBehaviorParams.instruction`. A `{{name}}` without a value is a `ValidationError`.
+- Instruction token aliases (`{field:X}`, `{action:<uuid>}`, `%{<digits>}`, `{<digits>}`) become `%{field:…}` / `%{action:…}`, on the agent `instruction` and on each behavior's.
+
+The prep applies to raw dicts only. A `BehaviorInput` instance passes through as it is, because `BehaviorInput` itself does no prep: pass raw dicts, or build each `BehaviorInput` from the output of `pipefy_sdk.behavior_placeholders.expand_behavior_placeholders`.
 
 ## Pre-write validation
 

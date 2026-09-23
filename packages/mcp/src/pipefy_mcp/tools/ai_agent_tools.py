@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.types import ToolAnnotations
 from pipefy_sdk import (
+    AiAgentConfigureError,
+    BehaviorInput,
     BehaviorPayload,
     CreateAiAgentInput,
     PipefyClient,
@@ -32,10 +34,6 @@ from pipefy_mcp.tools.ai_tool_helpers import (
     enrich_behavior_error,
     fetch_pipe_validation_context,
     validate_behaviors_against_pipe,
-)
-from pipefy_mcp.tools.behavior_placeholder_interpolation import (
-    expand_behaviors_placeholders,
-    normalize_pipefy_ai_instruction_tokens,
 )
 from pipefy_mcp.tools.destructive_tool_guard import check_destructive_confirmation
 from pipefy_mcp.tools.graphql_error_helpers import (
@@ -153,6 +151,20 @@ class AiAgentTools:
                 )
             except Exception:  # noqa: BLE001
                 return enriched
+
+        async def _describe_update_error(
+            exc: BaseException, behaviors: list[BehaviorInput], client: PipefyClient
+        ) -> str:
+            """Error text for a failed ``updateAiAgent``, with permission and validation hints."""
+            raw = [b.model_dump(by_alias=True) for b in behaviors]
+            try:
+                resolved = await resolve_and_populate_field_refs(client, raw)
+            except Exception:  # noqa: BLE001
+                resolved = raw
+            pipe_ids = collect_pipe_ids_from_behaviors(resolved)
+            perm_msg = await enrich_permission_denied_error(exc, pipe_ids, client)
+            error_text = await _enrich_with_validation(exc, resolved, client)
+            return f"{perm_msg}\n{error_text}" if perm_msg else error_text
 
         @mcp.tool(
             annotations=ToolAnnotations(readOnlyHint=False),
@@ -313,18 +325,13 @@ class AiAgentTools:
                 return build_ai_tool_error("repo_uuid must not be blank")
             if not instruction or not instruction.strip():
                 return build_ai_tool_error("instruction must not be blank")
-            instruction = normalize_pipefy_ai_instruction_tokens(instruction)
-            try:
-                behaviors_expanded = expand_behaviors_placeholders(behaviors)
-            except ValueError as exc:
-                return build_ai_tool_error(str(exc))
             disabled_at = None if active else datetime.now(timezone.utc).isoformat()
             try:
                 validated = CreateAiAgentInput(
                     name=name,
                     repo_uuid=repo_uuid,
                     instruction=instruction,
-                    behaviors=behaviors_expanded,
+                    behaviors=behaviors,
                     data_source_ids=data_source_ids or [],
                     disabled_at=disabled_at,
                 )
@@ -332,55 +339,31 @@ class AiAgentTools:
                 return build_ai_tool_error(str(exc))
 
             try:
-                create_result = await client.create_ai_agent(validated)
+                result = await client.create_ai_agent(validated)
+            except AiAgentConfigureError as exc:
+                return build_create_agent_partial_failure(
+                    agent_uuid=exc.agent_uuid,
+                    error=await _describe_update_error(
+                        exc.__cause__ or exc, validated.behaviors, client
+                    ),
+                    disabled_at=exc.disabled_at,
+                )
             except Exception as exc:  # noqa: BLE001
-                pipe_ids = collect_pipe_ids_from_behaviors(behaviors_expanded)
+                behavior_dicts = [
+                    b.model_dump(by_alias=True, exclude_none=True)
+                    for b in validated.behaviors
+                ]
+                pipe_ids = collect_pipe_ids_from_behaviors(behavior_dicts)
                 perm_msg = await enrich_permission_denied_error(exc, pipe_ids, client)
-                error_text = enrich_behavior_error(exc, behaviors_expanded)
+                error_text = enrich_behavior_error(exc, behavior_dicts)
                 if perm_msg:
                     error_text = f"{perm_msg}\n{error_text}"
                 return build_ai_tool_error(error_text)
 
-            agent_uuid = create_result["agent_uuid"]
-
-            update_input = UpdateAiAgentInput(
-                uuid=agent_uuid,
-                name=validated.name,
-                repo_uuid=validated.repo_uuid,
-                instruction=validated.instruction,
-                behaviors=validated.behaviors,
-                data_source_ids=validated.data_source_ids,
-                disabled_at=validated.disabled_at,
-                preserve_disabled_at=False,
-            )
-            try:
-                update_result = await client.update_ai_agent(update_input)
-            except Exception as exc:  # noqa: BLE001
-                try:
-                    resolved = await resolve_and_populate_field_refs(
-                        client,
-                        [b.model_dump(by_alias=True) for b in update_input.behaviors],
-                    )
-                except Exception:  # noqa: BLE001
-                    resolved = [
-                        b.model_dump(by_alias=True) for b in update_input.behaviors
-                    ]
-                pipe_ids = collect_pipe_ids_from_behaviors(resolved)
-                perm_msg = await enrich_permission_denied_error(exc, pipe_ids, client)
-                error_text = await _enrich_with_validation(exc, resolved, client)
-                if perm_msg:
-                    error_text = f"{perm_msg}\n{error_text}"
-                return build_create_agent_partial_failure(
-                    agent_uuid=agent_uuid,
-                    error=error_text,
-                    disabled_at=create_result.get("disabled_at"),
-                )
-
-            msg = f"AI Agent created and configured successfully. UUID: {agent_uuid}"
             return build_create_agent_success(
-                agent_uuid=agent_uuid,
-                message=msg,
-                disabled_at=update_result.get("disabled_at"),
+                agent_uuid=result["agent_uuid"],
+                message=result["message"],
+                disabled_at=result.get("disabled_at"),
             )
 
         @mcp.tool(
@@ -472,19 +455,13 @@ class AiAgentTools:
                 return build_ai_tool_error("name must not be blank")
             if not repo_uuid or not repo_uuid.strip():
                 return build_ai_tool_error("repo_uuid must not be blank")
-            if instruction:
-                instruction = normalize_pipefy_ai_instruction_tokens(instruction)
-            try:
-                behaviors_expanded = expand_behaviors_placeholders(behaviors)
-            except ValueError as exc:
-                return build_ai_tool_error(str(exc))
             try:
                 validated = UpdateAiAgentInput(
                     uuid=uuid,
                     name=name,
                     repo_uuid=repo_uuid,
                     instruction=instruction,
-                    behaviors=behaviors_expanded,
+                    behaviors=behaviors,
                     data_source_ids=data_source_ids or [],
                     disabled_at=disabled_at,
                 )
@@ -494,21 +471,9 @@ class AiAgentTools:
             try:
                 result = await client.update_ai_agent(validated)
             except Exception as exc:  # noqa: BLE001
-                try:
-                    resolved = await resolve_and_populate_field_refs(
-                        client,
-                        [b.model_dump(by_alias=True) for b in validated.behaviors],
-                    )
-                except Exception:  # noqa: BLE001
-                    resolved = [
-                        b.model_dump(by_alias=True) for b in validated.behaviors
-                    ]
-                pipe_ids = collect_pipe_ids_from_behaviors(resolved)
-                perm_msg = await enrich_permission_denied_error(exc, pipe_ids, client)
-                error_text = await _enrich_with_validation(exc, resolved, client)
-                if perm_msg:
-                    error_text = f"{perm_msg}\n{error_text}"
-                return build_ai_tool_error(error_text)
+                return build_ai_tool_error(
+                    await _describe_update_error(exc, validated.behaviors, client)
+                )
 
             return build_update_agent_success(
                 agent_uuid=result["agent_uuid"],
