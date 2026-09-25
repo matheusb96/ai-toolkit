@@ -4,9 +4,6 @@ description: >
   Copy this file when authoring a new Pipefy skill. Replace placeholders,
   then rename the folder so it matches the frontmatter name.
 tags: [pipefy, template]
-# Omit for all surfaces; otherwise use unique sdk/mcp/cli tokens.
-# metadata:
-#   surfaces: "mcp cli"
 ---
 
 # [Skill title]
