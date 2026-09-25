@@ -110,7 +110,7 @@ All fields are **required** unless noted:
 | `tags` | No | Optional list of relevant keywords. |
 | `metadata.surfaces` | No | Space-separated string of supported surfaces: `sdk`, `mcp`, `cli`. Omission means all three. |
 
-Declare only the surfaces on which the skill's workflow applies. `sdk` means consumers using `PipefyClient`, `mcp` means MCP clients, and `cli` means the `pipefy` command. This describes applicability, not identical call signatures or availability under every deployment profile; document prerequisites separately.
+Declare only the surfaces on which the skill's workflow applies. `sdk` means SDK consumers that build agent tools from `PipefyClient`, `mcp` means MCP clients, and `cli` means the `pipefy` command. This describes applicability, not identical call signatures or availability under every deployment profile; document prerequisites separately.
 
 For a skill limited to MCP and CLI:
 
